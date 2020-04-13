@@ -10,9 +10,7 @@ class Sentiment():
     def __init__(self):
         fileW2V = '../data/embedding/word2vec/baomoi.window2.vn.model.bin'
         self.model_word2vec = gensim.models.KeyedVectors.load_word2vec_format(fileW2V, binary=True)
-        self.sess = tf.Session()
-        self.classify = LSTM_SoftMax(self.sess)
-        self.classify.modeling()
+        self.classify = LSTM_SoftMax()
         self.classify.load_model()
         
     def predict(self,list_text):
