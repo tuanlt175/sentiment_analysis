@@ -1,32 +1,30 @@
 import tensorflow as tf
-from sourcecode.evaluate import evaluate_model
+from model_tensorflow.evaluate import evaluate_model
 
-class BiLSTM_SoftMax():
+class SoftMax():
     """ 
-    Model BiLSTM_SoftMax dùng cho bài toán phân loại câu
+    Model SoftMax dùng cho bài toán phân loại câu gồm 2 lớp tuyến tính và 1 lớp SoftMax
     Model dùng cross_entropy làm hàm mất mát và dùng Gradient Descent để tối ưu tham số
     Model code bằng TensofFlow v1
     """
-    def __init__(self, num_class=2,num_unit_lstm=128,learning_rate=0.01,weight_decay=0.00001,
-                 max_len=50,size_word_emd=300):
+    def __init__(self, num_class=2, num_unit=100, learning_rate=0.01,weight_decay=0.000001,
+                 size_doc_emd=300):
         """ 
         Khởi tạo lớp model với các tham số cơ bản
         
             Parameters: 
                 num_class (int): Số lớp cần phân loại
-                num_unit_lstm (int): Số lượng unit trong mỗi cell LSTM
-                max_len (int): Số tokens tối đa cho mỗi câu
-                size_word_emd (int): Số chiều của vector word embedding
+                num_unit (int): Số lượng unit trong lớp tuyến tính đầu tiên
+                size_doc_emd (int): Số chiều của vector docs embedding
                 learning_rate (float): tỷ lệ hay tốc độ học của model
                 weight_decay (float) : trọng số cho thành phần regularization L2 trong loss function
 
             Returns: 
-            Model_BiLSTM_SoftMax
+            SoftMax
         """
         self.num_class = num_class
-        self.num_unit_lstm = num_unit_lstm
-        self.max_len = max_len
-        self.size_word_emd = size_word_emd
+        self.num_unit = num_unit
+        self.size_doc_emd = size_doc_emd
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.sess = tf.compat.v1.Session(graph=self.modeling())
@@ -35,55 +33,33 @@ class BiLSTM_SoftMax():
         """ 
         Hàm khởi tạo Graph cho model, hay có thể nói là khởi tạo mô hình
         """
+        
         self.graph = tf.Graph()
         with self.graph.as_default():
             ## Placeholder
-            self.pl_X_train = tf.compat.v1.placeholder(tf.float32, shape=[None, self.max_len, self.size_word_emd])
+            self.pl_X_train = tf.compat.v1.placeholder(tf.float32, shape=[None, self.size_doc_emd])
             self.pl_Y_train = tf.compat.v1.placeholder(tf.int32,shape=[None])
             # xác xuất cho dropout ở cả lớp tuyến tính đầu tiên và trong cell LSTM
             self.keep_prob = tf.compat.v1.placeholder(tf.float32)
             
             ## Variable
             
-            # Trọng số và bias cho lớp tuyến tính chỉnh lưu đầu tiên: size_word_emd*num_unit_lstm
-            self.ln_w = tf.Variable(tf.random.truncated_normal([self.size_word_emd, self.num_unit_lstm], stddev=1))
-            self.ln_b = tf.Variable(tf.zeros([self.num_unit_lstm]))
+            # Trọng số và bias cho lớp tuyến tính đầu tiên: size_word_emd*num_unit
+            self.ln_w = tf.Variable(tf.random.truncated_normal([self.size_doc_emd, self.num_unit], stddev=1))
+            self.ln_b = tf.Variable(tf.zeros([self.num_unit]))
             
-            # trọng số và bias cho lớp tuyến tính phân loại đầu cuối
-            self.classify_w = tf.Variable(tf.random.truncated_normal([self.num_unit_lstm, self.num_class], stddev=1))
+            # trọng số và bias cho lớp tuyến tính phân loại cuối
+            self.classify_w = tf.Variable(tf.random.truncated_normal([self.num_unit, self.num_class], stddev=1))
             self.classify_b = tf.Variable(tf.zeros([self.num_class]))
             
-            ## Chuyển đổi ma trận đầu vào thành (max_len*None*size_word_emd)
-            X_train = tf.transpose(self.pl_X_train, [1, 0, 2])
-            # nối tất cả các câu lại thành 1 chuỗi ((max_len*None)*size_word_emd))
-            X_train = tf.reshape(X_train, [-1, self.size_word_emd]) 
             
             ## Lớp tuyến tính chỉnh lưu đầu tiên
-            X_train = tf.nn.relu(tf.add(tf.matmul(X_train, self.ln_w), self.ln_b))  # X_train*ln_w + ln_b
+            X_train = tf.nn.relu(tf.add(tf.matmul(self.pl_X_train, self.ln_w), self.ln_b))  # X_train*ln_w + ln_b
             X_train = tf.nn.dropout(X_train, rate=1-self.keep_prob)
             
-            # Cắt chuỗi câu trong x_train thành 1 list gồm max_len Tensor([None*num_unit_lstm])
-            # Mỗi Tensor([None*num_unit_lstm]) sẽ là đầu vào cho 1 cell LSTM tại 1 timestep, có max_len timestep
-            X_train = tf.split(axis = 0, num_or_size_splits = self.max_len, value = X_train)
-            
-            ## Cell LSTM tiến và lùi
-            lstm_fw_cell = tf.nn.rnn_cell.BasicLSTMCell(self.num_unit_lstm, forget_bias = 0.8)
-            lstm_bw_cell = tf.nn.rnn_cell.BasicLSTMCell(self.num_unit_lstm, forget_bias = 0.8)
-            
-            ## Dropout cho LSTM
-            lstm_fw_cell = tf.compat.v1.nn.rnn_cell.DropoutWrapper(cell=lstm_fw_cell,state_keep_prob=self.keep_prob)
-            lstm_bw_cell = tf.compat.v1.nn.rnn_cell.DropoutWrapper(cell=lstm_bw_cell,state_keep_prob=self.keep_prob)
-            
-            # Lấy ma trận kết quả từ mạng BiLSTM: output_state_fw[1] có dạng Tensor([None*num_unit_lstm])
-            outputs, output_state_fw, output_state_bw = tf.contrib.rnn.static_bidirectional_rnn( lstm_fw_cell,
-                                                                                                lstm_bw_cell,
-                                                                                                X_train,
-                                                                                                dtype='float32')
-            # cộng kết quả của 2 lớp lại: output_state_fw + output_state_bw
-            sum_fw_bw = tf.add(output_state_fw[1], output_state_bw[1]) #Tensor([None*num_unit_lstm])
             
             ## Lớp tuyến tính cho softmax
-            classifier = tf.add(tf.matmul(sum_fw_bw, self.classify_w), self.classify_b) # sum_fw_bw*classify_w + classify_b
+            classifier = tf.add(tf.matmul(X_train, self.classify_w), self.classify_b) # sum_fw_bw*classify_w + classify_b
             
             ## Predict
             self.prediction = tf.argmax(tf.nn.softmax(classifier), 1)
@@ -118,7 +94,7 @@ class BiLSTM_SoftMax():
             self.init = tf.compat.v1.global_variables_initializer()
         return self.graph
     
-    def load_model(self, path_file = "models/BiLSTM-Softmax/BiLSTM-Softmax.ckpt"):
+    def load_model(self, path_file = "models/Softmax/Softmax.ckpt"):
         """ 
         Hàm load model từ file
             Parameters: 
@@ -126,7 +102,7 @@ class BiLSTM_SoftMax():
         """
         self.saver.restore(self.sess, path_file)
 
-    def save_model(self, path_file = "models/BiLSTM-Softmax/BiLSTM-Softmax.ckpt"):
+    def save_model(self, path_file = "models/Softmax/Softmax.ckpt"):
         """ 
         Hàm lưu model ra file
             Parameters: 
@@ -139,7 +115,7 @@ class BiLSTM_SoftMax():
         Hàm train model
             Parameters: 
                 data (ndarray) : dữ liệu train có dạng [X_train,Y_train]
-                                X_train: một mảng 3 chiều có dạng num_docs*max_word_of_sent*word_embedding
+                                X_train: một mảng 2 chiều có dạng num_docs*doc_embedding
                                 Y_train: [1,2,1,2,3,1] với 0,1,2,3,.. là nhãn
                 loop (int) : số vòng lặp khi train model
                 batch_size (int) : số lượng dữ liệu đưa vào trong mỗi lần chạy
@@ -164,9 +140,9 @@ class BiLSTM_SoftMax():
                                               self.keep_prob: 0.8,
                                           })
                 #loss_list.append(float(loss))
-            if step%1==0:
+            if step%100==0:
                 print("Vòng lặp thứ {} và giá trị cross entropy là {}".format(step,loss))
-                
+        print("Giá trị cross entropy là {}".format(loss)) 
         return True
     
     def evaluate(self, data):
@@ -175,7 +151,7 @@ class BiLSTM_SoftMax():
 
             Parameters: 
                 data (ndarray) : dữ liệu train có dạng [X_test,Y_test]
-                            X_test: một mảng 3 chiều có dạng num_docs*max_word_of_sent*word_embedding
+                            X_test: một mảng 2 chiều có dạng num_docs*doc_embedding
                             Y_test: [1,2,1,2,3,1] với 0,1,2,3,.. là nhãn
             Returns: 
                 Hàm in ra các thông số đánh giá precision, recall, F1
@@ -186,17 +162,17 @@ class BiLSTM_SoftMax():
                                       self.pl_X_train: data[0],
                                       self.keep_prob:1.0,
                                       })
-        print("Model BiLSTM + SoftMax")
-        evaluate_model(self.num_class,data[1],prediction)
+        print("Model SoftMax")
+        index_mistake = evaluate_model(self.num_class,data[1],prediction)
         # Trả về index của các trường hợp bị sai
-        return [i for i,x in enumerate(prediction) if x != data[1][i]]
+        return index_mistake
 
     def predict(self, data):
         """ 
         Hàm dự đoán nhãn của dữ liệu
 
             Parameters: 
-                data: một mảng 3 chiều có dạng num_docs*max_word_of_sent*word_embedding
+                data: một mảng 2 chiều có dạng num_docs*doc_embedding
             Returns: 
                 prediction (ndarray): có dạng [1,2,3,0,1] với 0,1,2,3,.. là nhãn
         """
@@ -210,4 +186,4 @@ class BiLSTM_SoftMax():
         """
         Đóng tất cả các cài nguyên mà tensor.session của class sử dụng
         """
-        self.sess.close()      
+        self.sess.close()          

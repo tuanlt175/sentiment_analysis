@@ -1,10 +1,10 @@
 import tensorflow as tf
-from sourcecode.models.BiLSTM_SoftMax import BiLSTM_SoftMax
-from sourcecode.models.LSTM_SoftMax import LSTM_SoftMax
-from sourcecode.models.SoftMax import SoftMax
+from model_tensorflow.models.BiLSTM_SoftMax import BiLSTM_SoftMax
+from model_tensorflow.models.LSTM_SoftMax import LSTM_SoftMax
+from model_tensorflow.models.SoftMax import SoftMax
 import gensim  
 
-from sourcecode.preprocess import clean_data_test, get_mat_data_test
+from model_tensorflow.preprocess import clean_data_test, get_mat_data_test
 
 class Sentiment():
     def __init__(self):

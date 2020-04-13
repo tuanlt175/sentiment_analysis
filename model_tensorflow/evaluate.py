@@ -65,4 +65,4 @@ def evaluate_model(num_label,y_label,prediction):
         text = text+" "*5+"- "+"Recall:    "+ str(confusion_matrix[k][5]) + "\n"
         text = text+" "*5+"- "+"F1:        "+ str(confusion_matrix[k][6]) + "\n"
     print(text)
-    return text
+    return [i for i,x in enumerate(y_label) if x!=prediction[i]]

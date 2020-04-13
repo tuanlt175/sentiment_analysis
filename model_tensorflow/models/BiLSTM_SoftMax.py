@@ -1,9 +1,9 @@
 import tensorflow as tf
-from sourcecode.evaluate import evaluate_model
+from model_tensorflow.evaluate import evaluate_model
 
-class LSTM_SoftMax():
+class BiLSTM_SoftMax():
     """ 
-    Model LSTM_SoftMax dùng cho bài toán phân loại câu
+    Model BiLSTM_SoftMax dùng cho bài toán phân loại câu
     Model dùng cross_entropy làm hàm mất mát và dùng Gradient Descent để tối ưu tham số
     Model code bằng TensofFlow v1
     """
@@ -21,7 +21,7 @@ class LSTM_SoftMax():
                 weight_decay (float) : trọng số cho thành phần regularization L2 trong loss function
 
             Returns: 
-            LSTM_SoftMax
+            Model_BiLSTM_SoftMax
         """
         self.num_class = num_class
         self.num_unit_lstm = num_unit_lstm
@@ -66,19 +66,24 @@ class LSTM_SoftMax():
             # Mỗi Tensor([None*num_unit_lstm]) sẽ là đầu vào cho 1 cell LSTM tại 1 timestep, có max_len timestep
             X_train = tf.split(axis = 0, num_or_size_splits = self.max_len, value = X_train)
             
-            ## Cell LSTM
-            lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(self.num_unit_lstm, forget_bias = 0.8)
+            ## Cell LSTM tiến và lùi
+            lstm_fw_cell = tf.nn.rnn_cell.BasicLSTMCell(self.num_unit_lstm, forget_bias = 0.8)
+            lstm_bw_cell = tf.nn.rnn_cell.BasicLSTMCell(self.num_unit_lstm, forget_bias = 0.8)
             
             ## Dropout cho LSTM
-            lstm_cell = tf.compat.v1.nn.rnn_cell.DropoutWrapper(cell=lstm_cell,state_keep_prob=self.keep_prob)
+            lstm_fw_cell = tf.compat.v1.nn.rnn_cell.DropoutWrapper(cell=lstm_fw_cell,state_keep_prob=self.keep_prob)
+            lstm_bw_cell = tf.compat.v1.nn.rnn_cell.DropoutWrapper(cell=lstm_bw_cell,state_keep_prob=self.keep_prob)
             
-            # lstm_outputs chứa đầu ra ở từng time step, final_state là 1 tupe chứa trạng thái ẩn và đầu ra ở step cuối cùng
-            lstm_outputs, final_state = tf.contrib.rnn.static_rnn( lstm_cell,
-                                                                    X_train,
-                                                                    dtype=tf.float32)
+            # Lấy ma trận kết quả từ mạng BiLSTM: output_state_fw[1] có dạng Tensor([None*num_unit_lstm])
+            outputs, output_state_fw, output_state_bw = tf.contrib.rnn.static_bidirectional_rnn( lstm_fw_cell,
+                                                                                                lstm_bw_cell,
+                                                                                                X_train,
+                                                                                                dtype='float32')
+            # cộng kết quả của 2 lớp lại: output_state_fw + output_state_bw
+            sum_fw_bw = tf.add(output_state_fw[1], output_state_bw[1]) #Tensor([None*num_unit_lstm])
             
             ## Lớp tuyến tính cho softmax
-            classifier = tf.add(tf.matmul(final_state[1], self.classify_w), self.classify_b) # sum_fw_bw*classify_w + classify_b
+            classifier = tf.add(tf.matmul(sum_fw_bw, self.classify_w), self.classify_b) # sum_fw_bw*classify_w + classify_b
             
             ## Predict
             self.prediction = tf.argmax(tf.nn.softmax(classifier), 1)
@@ -113,7 +118,7 @@ class LSTM_SoftMax():
             self.init = tf.compat.v1.global_variables_initializer()
         return self.graph
     
-    def load_model(self, path_file = "models/LSTM-Softmax/LSTM-Softmax.ckpt"):
+    def load_model(self, path_file = "models/BiLSTM-Softmax/BiLSTM-Softmax.ckpt"):
         """ 
         Hàm load model từ file
             Parameters: 
@@ -121,7 +126,7 @@ class LSTM_SoftMax():
         """
         self.saver.restore(self.sess, path_file)
 
-    def save_model(self, path_file = "models/LSTM-Softmax/LSTM-Softmax.ckpt"):
+    def save_model(self, path_file = "models/BiLSTM-Softmax/BiLSTM-Softmax.ckpt"):
         """ 
         Hàm lưu model ra file
             Parameters: 
@@ -161,9 +166,9 @@ class LSTM_SoftMax():
                 #loss_list.append(float(loss))
             if step%1==0:
                 print("Vòng lặp thứ {} và giá trị cross entropy là {}".format(step,loss))
-                
+        print("Giá trị cross entropy là {}".format(loss))       
         return True
-
+    
     def evaluate(self, data):
         """ 
         Hàm dự đoán nhãn của dữ liệu
@@ -181,10 +186,10 @@ class LSTM_SoftMax():
                                       self.pl_X_train: data[0],
                                       self.keep_prob:1.0,
                                       })
-        print("Model LSTM + SoftMax")
-        evaluate_model(self.num_class,data[1],prediction)
+        print("Model BiLSTM + SoftMax")
+        index_mistake = evaluate_model(self.num_class,data[1],prediction)
         # Trả về index của các trường hợp bị sai
-        return [i for i,x in enumerate(prediction) if x != data[1][i]]
+        return index_mistake
 
     def predict(self, data):
         """ 
@@ -205,4 +210,4 @@ class LSTM_SoftMax():
         """
         Đóng tất cả các cài nguyên mà tensor.session của class sử dụng
         """
-        self.sess.close()    
+        self.sess.close()      
