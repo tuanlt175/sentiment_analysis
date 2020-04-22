@@ -1,2 +1,0 @@
-model_checkpoint_path: "LSTM-Softmax.ckpt"
-all_model_checkpoint_paths: "LSTM-Softmax.ckpt"

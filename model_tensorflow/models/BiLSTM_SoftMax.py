@@ -150,6 +150,7 @@ class BiLSTM_SoftMax():
         
         num_data = len(data[1])
         num_batch = num_data//batch_size
+        min_loss = 1000000
         for step in range(loop):
             for i in range(num_batch+1):
                 start = i*batch_size
@@ -164,9 +165,11 @@ class BiLSTM_SoftMax():
                                               self.keep_prob: 0.8,
                                           })
                 #loss_list.append(float(loss))
+                if float(loss) < min_loss:
+                    min_loss = float(loss)
             if step%1==0:
-                print("Vòng lặp thứ {} và giá trị cross entropy là {}".format(step,loss))
-        print("Giá trị cross entropy là {}".format(loss))       
+                print("Vòng lặp thứ {} và giá trị cross entropy là {}   current_min_cross_entropy {}".format(step,loss,min_loss))
+        print("Giá trị cross entropy nhỏ nhất là {}".format(min_loss)) 
         return True
     
     def evaluate(self, data):

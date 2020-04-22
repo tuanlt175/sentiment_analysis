@@ -1,0 +1,3 @@
+model_checkpoint_path: "LSTM_SoftMax_304_256"
+all_model_checkpoint_paths: "../LSTM-Softmax/LSTM-Softmax.ckpt"
+all_model_checkpoint_paths: "LSTM_SoftMax_304_256"

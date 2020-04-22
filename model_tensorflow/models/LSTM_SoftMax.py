@@ -1,5 +1,6 @@
 import tensorflow as tf
 from model_tensorflow.evaluate import evaluate_model
+from math import sqrt
 
 class LSTM_SoftMax():
     """ 
@@ -46,11 +47,11 @@ class LSTM_SoftMax():
             ## Variable
             
             # Trọng số và bias cho lớp tuyến tính chỉnh lưu đầu tiên: size_word_emd*num_unit_lstm
-            self.ln_w = tf.Variable(tf.random.truncated_normal([self.size_word_emd, self.num_unit_lstm], stddev=1))
+            self.ln_w = tf.Variable(tf.random.truncated_normal([self.size_word_emd, self.num_unit_lstm],seed=1,stddev=1))# stddev=sqrt(1/self.size_word_emd)
             self.ln_b = tf.Variable(tf.zeros([self.num_unit_lstm]))
             
             # trọng số và bias cho lớp tuyến tính phân loại đầu cuối
-            self.classify_w = tf.Variable(tf.random.truncated_normal([self.num_unit_lstm, self.num_class], stddev=1))
+            self.classify_w = tf.Variable(tf.random.truncated_normal([self.num_unit_lstm, self.num_class],seed=1, stddev=1))
             self.classify_b = tf.Variable(tf.zeros([self.num_class]))
             
             ## Chuyển đổi ma trận đầu vào thành (max_len*None*size_word_emd)
@@ -145,6 +146,7 @@ class LSTM_SoftMax():
         
         num_data = len(data[1])
         num_batch = num_data//batch_size
+        min_loss = 1000000
         for step in range(loop):
             for i in range(num_batch+1):
                 start = i*batch_size
@@ -159,9 +161,11 @@ class LSTM_SoftMax():
                                               self.keep_prob: 0.8,
                                           })
                 #loss_list.append(float(loss))
+                if float(loss) < min_loss:
+                    min_loss = float(loss)
             if step%1==0:
-                print("Vòng lặp thứ {} và giá trị cross entropy là {}".format(step,loss))
-        print("Giá trị cross entropy là {}".format(loss))     
+                print("Vòng lặp thứ {} và giá trị cross entropy là {}   current_min_cross_entropy {}".format(step,loss,min_loss))
+        print("Giá trị cross entropy nhỏ nhất là {}".format(min_loss)) 
         return True
 
     def evaluate(self, data):
